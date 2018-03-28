@@ -3,7 +3,7 @@
 ==================
 
 - The Deathstar can be used to automate those pesky pre-scanning reconnaisance needed before a pentration test. 
-- Automate any tools used in your daily asenal: Nmap, Openssl Scans, Nikto -- the process is up to you.
+- Automate any tools used in your daily arsenal: Nmap, Openssl Scans, Nikto -- the process is up to you.
 
 *Requirements*
 - [Docker ](https://github.com/docker "Docker")is installed on your system
