@@ -7,7 +7,7 @@
 
 *Requirements*
 - [Docker ](https://github.com/docker "Docker")is installed on your system
-- Whatever your scanning/tools you use and scripts are placed in a Docker template.
+- Whatever scanning/tools you use and scripts are placed in a Docker template.
 
 *Usage*
 -----------
