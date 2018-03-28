@@ -24,6 +24,9 @@ The Deathstar takes the IPlist.txt and parses it for the number of IPs that need
 
 The 10 IPs then get copied into the docker container (takes a saved template -- in this case mine is named "ubuntu:v10")
 - Within the template (e.g. ubuntu:v10) you place the scanning tools needed and custom scripts used for pre-pen recon.
+- In this use case each ubuntu:v10 had one script that got called:
+> docker exec -d deathstar#{$i} python start.py
+- *This start.py contained all the commands to start the desired scans (nmap, nikto, custom scripts) **Edit line 97** as needed.* 
 
 
 **Then you sit back and enjoy the demolition!**
