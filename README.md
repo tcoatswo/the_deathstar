@@ -20,10 +20,10 @@
 *How it works*
 -----------------
 
-The Deathstar takes the IPlist.txt and parses it for the number of IPs that need to be imported. It defaults to creating 1 docker container instance for every 10 IPs listed. In this way it can be more efficent when delegating tasks (if you runn this on something like AWS you cant then also increase the processing power that the whole machine will have, in turn giving Docker Deathstars more computation resources to work with -- this is highly dependant on your needs). 
+The Deathstar takes the IPlist.txt and parses it for the number of IPs that need to be imported. It defaults to creating 1 docker container instance for every 10 IPs listed. In this way it can be more efficent when delegating tasks (if you run this on something like AWS you cant then also increase the processing power that the whole machine will have, in turn giving Docker Deathstars more computation resources to work with -- this is highly dependant on your needs). 
 
 The 10 IPs then get copied into the docker container (takes a saved template -- in this case mine is named "ubuntu:v10")
-- Withint the ubuntu:v10 is placed the scanning tools needed and custom scripts used for pre-pen recon.
+- Within the template (e.g. ubuntu:v10) you place the scanning tools needed and custom scripts used for pre-pen recon.
 
 
 **Then you sit back and enjoy the demolition!**
