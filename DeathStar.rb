@@ -1,154 +1,214 @@
-#!/usr/bin/env ruby		 
-#	 			 		
-#	DeathStar   
-#		Version 1.0         
-#				 
-#	Author: Tyler Coatsworth 
-#		Date July, 2016	 
-#				 
-#/////////////////////////////////  
-require 'find'
-require 'expect'
+#!/usr/bin/env ruby
+#
+# DeathStar (v1.1)
+# Author: Tyler Coatsworth
+#
+# Original concept: shard a target list across multiple Docker containers.
+# This update preserves default behavior but adds:
+# - environment-variable configuration
+# - safer cleanup (only containers we create)
+# - basic validation + optional public-target confirmation
+# - removes global "stop all containers" behavior
+
 require 'fileutils'
-require 'pathname'
-require 'pty'
-require 'digest/md5'
-require 'io/console'
+require 'ipaddr'
 
-$deathstarNumber = 1
-ipListLocation = "/home/ubuntu/IPlist.txt"
+# ---------------------------
+# Colors
+# ---------------------------
 
-# Colors! << Usage: puts color('text') >>
-	def colorize(number, text) 
-		"\e[#{number}m#{text}\e[0m" 
-	end 
-
-	def red(text); colorize(31, text); end
-	def green(text); colorize(32, text); end
-	def amber(text); colorize(33, text); end
-	def blue(text); colorize(34, text); end
-	def purple(text); colorize(35, text); end
-	def teal(text); colorize(36, text); end
-#/////////////////////////////////////////////
-
-def parse_list(ipListLocation)
-		line_count = IO.readlines(ipListLocation).size  
-		remainder = line_count % 10
-		box_num = line_count / 10
-		if remainder > 0
-			$deathstarNumber = box_num + 1
-		end
-
+def colorize(number, text)
+  "\e[#{number}m#{text}\e[0m"
 end
 
-def bruccy(fileloc, startline)
+def red(text)    = colorize(31, text)
 
-    endline = IO.readlines(fileloc).size
-    count = 0
-    c=count.to_i
-	count=count+1
-    aa=[]
-	startline = startline - 1
-    while count <= 10 do
-        aa[c..endline] = IO.readlines(fileloc)
-		system("touch /home/ubuntu/bruccy_ip.txt")
-		system("printf \"#{aa[startline]}\" >> /home/ubuntu/bruccy_ip.txt")
-       startline += 1
-        count += 1
-   end
-	system("cat /home/ubuntu/bruccy_ip.txt") #probably leave me in here for debug porpoises.
-	puts ("==============================================")
+def green(text)  = colorize(32, text)
+
+def amber(text)  = colorize(33, text)
+
+def teal(text)   = colorize(36, text)
+
+def blue(text)   = colorize(34, text)
+
+# ---------------------------
+# Config (defaults preserve original behavior)
+# ---------------------------
+
+IP_LIST    = ENV.fetch('IP_LIST', '/home/ubuntu/IPlist.txt')
+OUTPUT_DIR = ENV.fetch('OUTPUT_DIR', '/home/ubuntu/SCAN-RESULTS/')
+IMAGE      = ENV.fetch('IMAGE', 'ubuntu:v10')
+EXEC_CMD   = ENV.fetch('EXEC_CMD', 'python start.py')
+
+SHARD_SIZE = Integer(ENV.fetch('SHARD_SIZE', '10'))
+MAX_MINUTES = Integer(ENV.fetch('MAX_MINUTES', '30'))
+CONFIRM = ENV['CONFIRM']
+
+TMP_SHARD = ENV.fetch('TMP_SHARD', '/tmp/deathstar_shard.txt')
+
+raise "SHARD_SIZE must be > 0" if SHARD_SIZE <= 0
+raise "MAX_MINUTES must be > 0" if MAX_MINUTES <= 0
+
+# ---------------------------
+# Helpers
+# ---------------------------
+
+def system_ok(cmd)
+  ok = system(cmd)
+  raise "Command failed: #{cmd}" unless ok
+  ok
 end
 
-
-def copy_list_into_dockers(ipListLocation, deathstarNumber)
-		v = 1
-	for i in 1..deathstarNumber do
-		if i > 1
-		v += 10
-		end
-		bruccy(ipListLocation, v)
-		
-		death_count = "deathstar" + i.to_s
-			system("docker cp /home/ubuntu/bruccy_ip.txt #{death_count}:/IPlist.txt")	
-			system("rm /home/ubuntu/bruccy_ip.txt")
-	end
-	
+def docker_capture(cmd)
+  `#{cmd}`.to_s
 end
 
-def create_start_dockers(deathstarNumber)
-	#puts ("CSD imported number of death stars: #{deathstarNumber}")
-	k = 1
-	donewithstars = deathstarNumber + 1
-	
-	while k < donewithstars do
-		system("docker run --name deathstar#{k} -d -it ubuntu:v10")
-		k+=1
-		#puts ("k is: #{k}")
-	end
+def deathstar_container_name(i)
+  "deathstar#{i}"
 end
 
-def exec_laser_startup(deathstarNumber)
-	#puts ("ELS imported number of death stars: #{deathstarNumber}")
-	$i = 1
-	$done = deathstarNumber + 1
-		
-	while $i < $done do
-		system("docker exec -d deathstar#{$i} python start.py")
-		puts green("FIRING: deathstar#{$i}")
-		$i +=1
-	end
+def list_deathstar_containers
+  out = docker_capture("docker ps -a --format '{{.Names}}'")
+  out.lines.map(&:strip).select { |n| n.start_with?('deathstar') }
 end
 
-def clean_up_the_evidence()
-	system("docker stop $(docker ps -a -q)")
-	system("docker rm $(docker ps -a -q)")
+def cleanup_deathstars
+  names = list_deathstar_containers
+  return if names.empty?
+
+  puts teal("STATUS: Cleaning up #{names.length} deathstar container(s)...")
+  names.each do |name|
+    system("docker rm -f #{name} > /dev/null 2>&1")
+  end
 end
 
-def recursive_timed_copy(deathstarNumber)
-	puts amber("STATUS: Initiating recursive copy, once per minute.")
-	system("mkdir /home/ubuntu/SCAN-RESULTS/")
-	sleep(60)
-	$c = 1
-	$maxtime = deathstarNumber + 1
-	$timer = 1
-	$maxtime = 30
-	
-	while $timer < $maxtime # runs this loop for maxtime * 60 (seconds), to recursively copy files on a period of 1 minute.
-		while $c < $done do
-			system("docker cp deathstar#{$c}:/home/ /home/ubuntu/SCAN-RESULTS/deathstar#{$c}-results")
-			puts green("Copying Files from: deathstar#{$c}")
-			$c +=1
-		end
-		$c = 1
-		puts amber("... Results from #{$timer} minute(s)")
-		$timer += 1
-		sleep(60) # waits for 1 minute
-		system("rm -R /home/ubuntu/SCAN-RESULTS/")
-		system("mkdir /home/ubuntu/SCAN-RESULTS/")
-	end
+def read_targets(path)
+  raise "IP_LIST not found: #{path}" unless File.exist?(path)
+  lines = File.read(path).lines.map { |l| l.strip }.reject(&:empty?)
+  raise "IP_LIST is empty: #{path}" if lines.empty?
+  lines
 end
 
-puts teal('STATUS: Deleting old deathstars...')
-clean_up_the_evidence()
-puts teal('STATUS: DeathStar Assembly In Progress...')
-sleep(2)
-parse_list(ipListLocation)
-puts amber("Preparing to create #{$deathstarNumber} deathstars")
-create_start_dockers($deathstarNumber)
+def looks_like_public_ip?(s)
+  ip = IPAddr.new(s) rescue nil
+  return false unless ip
+  # Treat RFC1918 + loopback + link-local as non-public
+  return false if ip.private? || ip.loopback? || ip.link_local?
+  true
+end
+
+def confirm_if_public(targets)
+  public_hits = targets.select { |t| looks_like_public_ip?(t) }
+  return if public_hits.empty?
+  return if CONFIRM.to_s.strip.upcase == 'YES'
+
+  msg = <<~MSG
+    WARNING: Your target list includes #{public_hits.length} public IP(s).
+    This tool is intended for authorized testing only.
+
+    To proceed, set CONFIRM=YES (recommended for automation) or type YES interactively.
+  MSG
+
+  puts red(msg)
+
+  if $stdin.tty?
+    print amber('Type YES to continue: ')
+    answer = $stdin.gets.to_s.strip
+    raise 'Aborted.' unless answer == 'YES'
+  else
+    raise 'Aborted (non-interactive). Set CONFIRM=YES to proceed.'
+  end
+end
+
+# ---------------------------
+# Core logic
+# ---------------------------
+
+def shard_count(target_count)
+  (target_count.to_f / SHARD_SIZE).ceil
+end
+
+def write_shard(targets, start_index)
+  shard = targets.slice(start_index, SHARD_SIZE) || []
+  File.write(TMP_SHARD, shard.join("\n") + "\n")
+  shard
+end
+
+def create_start_dockers(n)
+  (1..n).each do |i|
+    name = deathstar_container_name(i)
+    system_ok("docker run --name #{name} -d -it #{IMAGE} > /dev/null")
+  end
+end
+
+def copy_list_into_dockers(targets, n)
+  idx = 0
+  (1..n).each do |i|
+    shard = write_shard(targets, idx)
+    raise "Unexpected empty shard at #{i}" if shard.empty?
+
+    name = deathstar_container_name(i)
+    system_ok("docker cp #{TMP_SHARD} #{name}:/IPlist.txt")
+
+    idx += SHARD_SIZE
+  end
+  FileUtils.rm_f(TMP_SHARD)
+end
+
+def exec_laser_startup(n)
+  (1..n).each do |i|
+    name = deathstar_container_name(i)
+    system_ok("docker exec -d #{name} #{EXEC_CMD}")
+    puts green("FIRING: #{name}")
+  end
+end
+
+def recursive_timed_copy(n)
+  FileUtils.mkdir_p(OUTPUT_DIR)
+  puts amber("STATUS: Copying results once per minute for up to #{MAX_MINUTES} minute(s).")
+
+  (1..MAX_MINUTES).each do |minute|
+    (1..n).each do |i|
+      name = deathstar_container_name(i)
+      dest = File.join(OUTPUT_DIR, "#{name}-results")
+      FileUtils.rm_rf(dest)
+      FileUtils.mkdir_p(dest)
+      system("docker cp #{name}:/home/ #{dest} > /dev/null 2>&1")
+      puts green("Copying Files from: #{name}")
+    end
+
+    puts amber("... Results from #{minute} minute(s)")
+    sleep(60)
+  end
+end
+
+# ---------------------------
+# Main
+# ---------------------------
+
+puts teal('STATUS: Initializing Deathstar...')
+
+cleanup_deathstars
+
+targets = read_targets(IP_LIST)
+confirm_if_public(targets)
+
+n = shard_count(targets.length)
+puts amber("Preparing to create #{n} deathstar(s) (#{SHARD_SIZE} targets per shard)")
+
+create_start_dockers(n)
+
 puts amber('---[LOCKING COORDINATES]---')
-sleep(3)
-system("cat /home/ubuntu/IPlist.txt")
-system("echo  ")
-sleep(2)
-puts amber('STATUS: Charging lazer...')
-sleep(2)
-copy_list_into_dockers(ipListLocation, $deathstarNumber)
-sleep(1)
-puts green('STATUS: Charge Complete.')
-sleep(2)
+puts blue("Using IP_LIST: #{IP_LIST}")
+puts blue("Using IMAGE:   #{IMAGE}")
+puts blue("Using EXEC_CMD: #{EXEC_CMD}")
+puts blue("Using OUTPUT_DIR: #{OUTPUT_DIR}")
+puts
+
+copy_list_into_dockers(targets, n)
+puts green('STATUS: Shards loaded.')
+
 puts teal('Countdown to the destruction of Alderaan:')
-sleep(2)
 puts red('3...')
 sleep(1)
 puts amber('2...')
@@ -156,16 +216,11 @@ sleep(1)
 puts green('1...')
 sleep(1)
 puts red('---[FIRING DEATH STAR]---')
-sleep(3)
-exec_laser_startup($deathstarNumber)
-puts red("ALL YOUR BASE ARE BELONG TO US.")
-puts blue('------------------------')
-sleep(2)
-puts green('Target is a confirmed hit.')
-sleep(2)
-puts amber('Alderaan has been destroyed.')
-sleep(2)
-puts red('---[SHUTTING DOWN DEATHSTAR]---')
-sleep(2)
-recursive_timed_copy($deathstarNumber)
-clean_up_the_evidence()
+
+exec_laser_startup(n)
+
+puts red('---[COLLECTING RESULTS]---')
+recursive_timed_copy(n)
+
+puts teal('STATUS: Shutting down Deathstar...')
+cleanup_deathstars

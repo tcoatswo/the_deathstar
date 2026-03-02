@@ -1,37 +1,61 @@
+# The Deathstar
 
-**The Deathstar**
-==================
+Dockerized **target sharding** for parallel recon workflows.
 
-- The Deathstar can be used to automate those pesky pre-scanning reconnaisance needed before a pentration test. 
-- Automate any tools used in your daily arsenal: Nmap, Openssl Scans, Nikto -- the process is up to you.
+Given a list of targets, The Deathstar splits them into shards (default: 10 per shard), launches one container per shard, copies the shard into each container, and executes a configurable command inside each container (default: `python start.py`).
 
-*Requirements*
-- [Docker ](https://github.com/docker "Docker")is installed on your system
-- Whatever scanning/tools you use and scripts are placed in a Docker template.
+## Why it matters
+When you have authorized scope that’s large enough, the bottleneck is often orchestration: getting repeatable, parallel workers stood up quickly and collecting results consistently. This project is a lightweight, hackable orchestrator for that job.
 
-*Usage*
------------
+## Scope / ethics
+This tool is intended for **authorized security testing and lab environments**. You are responsible for ensuring you have explicit permission to scan any targets you provide.
 
-- Set the list of IPs to target with the variable *ipListLocation* (default location set to "/home/ubuntu/IPlist.txt")
--- The IPs should be stored as a .txt file with each IP denoted on its own separate line
-- Results will be outputed, and then copied to the specified location (default location set to "/home/ubuntu/SCAN-RESULTS/")
--- The output will be separated by Deathstar box.
+## Quick start (reproducible demo)
+The repo includes a toy worker image that simply reads targets and writes a small output file.
 
-*How it works*
------------------
+```bash
+# 1) Build the demo worker image
+cd docker/demo-worker
+docker build -t deathstar-demo:latest .
 
-The Deathstar takes the IPlist.txt and parses it for the number of IPs that need to be imported. It defaults to creating 1 docker container instance for every 10 IPs listed. In this way it can be more efficent when delegating tasks (if you run this on something like AWS you can then also increase the processing power that the whole machine will have, in turn giving Docker Deathstars more computation resources to work with -- this is highly dependant on your needs). 
+# 2) Create a targets file
+printf "10.0.0.1\n10.0.0.2\n" > ./targets.txt
 
-The 10 IPs then get copied into the docker container (takes a saved template -- in this case mine is named "ubuntu:v10")
-- Within the template (e.g. ubuntu:v10) you place the scanning tools needed and custom scripts used for pre-pen recon.
-- In this use case each ubuntu:v10 had one script that got called:
-> docker exec -d deathstar#{$i} python start.py
-- *This start.py contained all the commands to start the desired scans (nmap, nikto, custom scripts) **Edit line 97** as needed.* 
+# 3) Run
+IP_LIST="$PWD/targets.txt" \
+IMAGE="deathstar-demo:latest" \
+OUTPUT_DIR="$PWD/SCAN-RESULTS" \
+ruby ./DeathStar.rb
+```
 
+Outputs land under `OUTPUT_DIR/deathstar<N>-results/`.
 
-**Then you sit back and enjoy the demolition!**
+## Configuration (environment variables)
+Defaults preserve the original behavior.
 
-*"I think it is time we demonstrated the full power of this station. Set your course for Alderaan."*
-\- Governor Tarkin
+- `IP_LIST` (default: `/home/ubuntu/IPlist.txt`)
+- `OUTPUT_DIR` (default: `/home/ubuntu/SCAN-RESULTS/`)
+- `IMAGE` (default: `ubuntu:v10`)
+- `SHARD_SIZE` (default: `10`)
+- `EXEC_CMD` (default: `python start.py`)
+- `MAX_MINUTES` (default: `30`) — how many minutes to keep copying results
+- `CONFIRM` (optional) — set to `YES` to bypass the public-target confirmation prompt
 
-Happy hacking!
+## How it works (high level)
+1. Read `IP_LIST`
+2. Split into shards of `SHARD_SIZE`
+3. Start `N` containers from `IMAGE` named `deathstar1..N`
+4. Copy shard file into each container as `/IPlist.txt`
+5. Run `EXEC_CMD` inside each container
+6. Every minute, copy `/home/` from each container into `OUTPUT_DIR/deathstar<N>-results/`
+7. Clean up containers created by this tool
+
+## Notes on worker images
+The original workflow assumed an image (e.g., `ubuntu:v10`) that already contained your scanning tools and a `start.py` that performs the work. The included demo worker is a safe template you can extend.
+
+## About
+Inputs a list of targets and creates Docker worker containers to parallelize recon/scanning workflows.
+
+---
+
+> "I think it is time we demonstrated the full power of this station. Set your course for Alderaan." — Governor Tarkin
