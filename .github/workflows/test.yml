@@ -1,0 +1,14 @@
+name: Test
+on:
+  push:
+  pull_request:
+jobs:
+  ruby:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+      - run: ruby -c DeathStar.rb
+      - run: ruby test/deathstar_test.rb
